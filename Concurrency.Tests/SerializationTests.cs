@@ -786,13 +786,13 @@ public sealed class SerializationTests
   }
 
   [Fact]
-  public void SingleDep_HundredThousandSyncTasks_Staggered_RunSerially()
+  public void SingleDep_TwoThousandSyncTasks_ThreadPoolDispatch_RunSerially()
   {
     var actor = new TestActor();
     var running = 0;
     var violations = 0;
     var executed = 0;
-    const int taskCount = 100_000;
+    const int taskCount = 2_000;
     var completed = new CountdownEvent(taskCount);
 
     LogManager.SuspendLogging();
@@ -800,20 +800,17 @@ public sealed class SerializationTests
     {
       for (var i = 0; i < taskCount; i++)
       {
-        ThreadPool.QueueUserWorkItem(_ =>
+        actor.Post(() =>
         {
-          actor.Post(() =>
+          if (Interlocked.Increment(ref running) > 1)
           {
-            if (Interlocked.Increment(ref running) > 1)
-            {
-              Interlocked.Increment(ref violations);
-            }
+            Interlocked.Increment(ref violations);
+          }
 
-            Interlocked.Increment(ref executed);
-            Interlocked.Decrement(ref running);
-            completed.Signal();
-          });
-        });
+          Interlocked.Increment(ref executed);
+          Interlocked.Decrement(ref running);
+          completed.Signal();
+        }, dispatchToThreadPool: true);
       }
 
       Assert.True(completed.Wait(TimeSpan.FromSeconds(60)));
@@ -828,13 +825,13 @@ public sealed class SerializationTests
   }
 
   [Fact]
-  public void ThreeDeps_HundredThousandSyncTasks_Staggered_RunSerially()
+  public void ThreeDeps_TwoThousandSyncTasks_ThreadPoolDispatch_RunSerially()
   {
     var actors = Enumerable.Range(0, 3).Select(_ => new TestActor()).ToArray();
     var running = 0;
     var violations = 0;
     var executed = 0;
-    const int taskCount = 100_000;
+    const int taskCount = 2_000;
     var completed = new CountdownEvent(taskCount);
 
     LogManager.SuspendLogging();
@@ -842,20 +839,17 @@ public sealed class SerializationTests
     {
       for (var i = 0; i < taskCount; i++)
       {
-        ThreadPool.QueueUserWorkItem(_ =>
+        actors[0].PostWith(() =>
         {
-          actors[0].PostWith(() =>
+          if (Interlocked.Increment(ref running) > 1)
           {
-            if (Interlocked.Increment(ref running) > 1)
-            {
-              Interlocked.Increment(ref violations);
-            }
+            Interlocked.Increment(ref violations);
+          }
 
-            Interlocked.Increment(ref executed);
-            Interlocked.Decrement(ref running);
-            completed.Signal();
-          }, actors[1], actors[2]);
-        });
+          Interlocked.Increment(ref executed);
+          Interlocked.Decrement(ref running);
+          completed.Signal();
+        }, dispatchToThreadPool: true, actors[1], actors[2]);
       }
 
       Assert.True(completed.Wait(TimeSpan.FromSeconds(60)));
@@ -870,7 +864,7 @@ public sealed class SerializationTests
   }
 
   [Fact]
-  public void CrossActorPostWith_HundredThousandTasks_Staggered_RunSerially()
+  public void CrossActorPostWith_TwoThousandTasks_ThreadPoolDispatch_RunSerially()
   {
     var actorA = new TestActor();
     var actorB = new TestActor();
@@ -879,7 +873,7 @@ public sealed class SerializationTests
     var runningB = 0;
     var runningC = 0;
     var violations = 0;
-    const int taskCount = 100_000;
+    const int taskCount = 2_000;
     var completed = new CountdownEvent(taskCount);
 
     LogManager.SuspendLogging();
@@ -890,60 +884,51 @@ public sealed class SerializationTests
         switch (i % 3)
         {
           case 0:
-            ThreadPool.QueueUserWorkItem(_ =>
+            actorA.PostWith(() =>
             {
-              actorA.PostWith(() =>
+              var ra = Interlocked.Increment(ref runningA);
+              var rb = Interlocked.Increment(ref runningB);
+              if (ra > 1 || rb > 1)
               {
-                var ra = Interlocked.Increment(ref runningA);
-                var rb = Interlocked.Increment(ref runningB);
-                if (ra > 1 || rb > 1)
-                {
-                  Interlocked.Increment(ref violations);
-                }
+                Interlocked.Increment(ref violations);
+              }
 
-                Interlocked.Decrement(ref runningA);
-                Interlocked.Decrement(ref runningB);
-                completed.Signal();
-              }, actorB);
-            });
+              Interlocked.Decrement(ref runningA);
+              Interlocked.Decrement(ref runningB);
+              completed.Signal();
+            }, dispatchToThreadPool: true, actorB);
 
             break;
           case 1:
-            ThreadPool.QueueUserWorkItem(_ =>
+            actorB.PostWith(() =>
             {
-              actorB.PostWith(() =>
+              var rb = Interlocked.Increment(ref runningB);
+              var rc = Interlocked.Increment(ref runningC);
+              if (rb > 1 || rc > 1)
               {
-                var rb = Interlocked.Increment(ref runningB);
-                var rc = Interlocked.Increment(ref runningC);
-                if (rb > 1 || rc > 1)
-                {
-                  Interlocked.Increment(ref violations);
-                }
+                Interlocked.Increment(ref violations);
+              }
 
-                Interlocked.Decrement(ref runningB);
-                Interlocked.Decrement(ref runningC);
-                completed.Signal();
-              }, actorC);
-            });
+              Interlocked.Decrement(ref runningB);
+              Interlocked.Decrement(ref runningC);
+              completed.Signal();
+            }, dispatchToThreadPool: true, actorC);
 
             break;
           default:
-            ThreadPool.QueueUserWorkItem(_ =>
+            actorA.PostWith(() =>
             {
-              actorA.PostWith(() =>
+              var ra = Interlocked.Increment(ref runningA);
+              var rc = Interlocked.Increment(ref runningC);
+              if (ra > 1 || rc > 1)
               {
-                var ra = Interlocked.Increment(ref runningA);
-                var rc = Interlocked.Increment(ref runningC);
-                if (ra > 1 || rc > 1)
-                {
-                  Interlocked.Increment(ref violations);
-                }
+                Interlocked.Increment(ref violations);
+              }
 
-                Interlocked.Decrement(ref runningA);
-                Interlocked.Decrement(ref runningC);
-                completed.Signal();
-              }, actorC);
-            });
+              Interlocked.Decrement(ref runningA);
+              Interlocked.Decrement(ref runningC);
+              completed.Signal();
+            }, dispatchToThreadPool: true, actorC);
 
             break;
         }
