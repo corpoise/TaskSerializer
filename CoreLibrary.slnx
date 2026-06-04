@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
+    <BuildType Name="Shipping" />
+  </Configurations>
+  <Project Path="Concurrency.Tests/Concurrency.Tests.csproj" />
+  <Project Path="Concurrency/Concurrency.csproj" />
+  <Project Path="Systems/Systems.csproj" />
+</Solution>

@@ -1,0 +1,36 @@
+# Build outputs
+bin/
+obj/
+
+# Logs
+logs/
+*.txt
+
+# NuGet
+.nuget/
+*.nupkg
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# Test results
+TestResults/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Internal docs (not for public repo)
+**/docs/
+**/CLAUDE.md
