@@ -295,30 +295,6 @@ for (var i = 0; i < taskCount; i++)
 
 > Debug · Release는 단일 측정값. Shipping은 10회 실행 후 최솟값 · 최댓값을 제외한 평균값.
 
----
-
-### dispatchToThreadPool 방식 — `*_ThreadPoolDispatch_RunSerially`
-
-`dispatchToThreadPool: true`로 `Post()` / `PostWith()`를 호출합니다. 첫 실행만 ThreadPool에 위임하므로 호출자 스레드가 블록되지 않습니다. 이후 체인은 ThreadPool 스레드에서 동기 실행됩니다.
-
-```csharp
-for (var i = 0; i < taskCount; i++)
-{
-  actor.Post(() => { ... }, dispatchToThreadPool: true);
-}
-```
-
-> **task 수 제한**: `dispatchToThreadPool: true`를 tight loop에서 호출하면 ThreadPool 스레드가 실행을 시작하기 전에 호출 스레드가 선행 task 체인을 모두 예약합니다. task 수가 충분히 많으면 재귀 실행 체인이 스택 오버플로우를 유발합니다 (테스트 환경에서 약 3,735 프레임). 이 패턴은 개별 heavy 작업을 ThreadPool에 위임하는 용도로 설계되었으므로 tight loop 사용은 설계 오류입니다. 스트레스 테스트는 task 수를 2,000으로 제한합니다.
-
-| 테스트 | 시나리오 | Debug | Release | Shipping |
-|--------|---------|-------|---------|---------|
-| `SingleDep_TwoThousandSyncTasks_ThreadPoolDispatch_RunSerially` | 1 dep × 2,000 tasks | <1 ms | <1 ms | <1 ms |
-| `ThreeDeps_TwoThousandSyncTasks_ThreadPoolDispatch_RunSerially` | 3 deps × 2,000 tasks | 1 ms | 1 ms | <1 ms |
-| `CrossActorPostWith_TwoThousandTasks_ThreadPoolDispatch_RunSerially` | A+B / B+C / A+C 교차 × 2,000 tasks | 46 ms † | 1 ms | 1 ms |
-
-> Debug · Release는 단일 측정값. Shipping은 10회 실행 후 최솟값 · 최댓값을 제외한 평균값.
->
-> † CrossActorPostWith Debug 46ms는 `#if DEBUG` 블록의 추가 검증(중복 dep 검사, callDepth 추적)이 3개 dependency를 동시에 처리하는 코드 경로에서 누적되는 오버헤드다. Release에서는 해당 블록이 제거되어 1ms로 감소한다.
 
 <br>
 <br>
