@@ -276,6 +276,27 @@ for (var t = 0; t < concurrency; t++)
 
 ---
 
+### Direct 방식 — `*_Direct_RunSerially`
+
+`Post()` / `PostWith()`를 호출 스레드에서 직접 루프로 호출합니다. 경합이 없으므로 sync-when-free가 항상 발동되어 각 task가 호출자 스레드에서 즉시 동기 실행됩니다. ThreadPool 큐잉 오버헤드가 전혀 없는 최소 비용 경로입니다.
+
+```csharp
+for (var i = 0; i < taskCount; i++)
+{
+  actor.Post(() => { ... });
+}
+```
+
+| 테스트 | 시나리오 | Debug | Release |
+|--------|---------|-------|---------|
+| `SingleDep_HundredThousandSyncTasks_Direct_RunSerially` | 1 dep × 100,000 tasks | 26 ms | 20 ms |
+| `ThreeDeps_HundredThousandSyncTasks_Direct_RunSerially` | 3 deps × 100,000 tasks | 35 ms | 24 ms |
+| `CrossActorPostWith_HundredThousandTasks_Direct_RunSerially` | A+B / B+C / A+C 교차 × 100,000 tasks | 28 ms | 21 ms |
+
+> Debug · Release는 단일 측정값이다.
+
+---
+
 ### Staggered 방식 — `*_Staggered_RunSerially`
 
 task마다 독립적인 `ThreadPool.QueueUserWorkItem`을 큐잉합니다. ThreadPool 스케줄러가 스레드를 자연스럽게 배분하므로 실제 서버 workload의 처리량에 가깝습니다.
