@@ -625,4 +625,178 @@ public sealed class SerializationTests
 
     Assert.Equal(0, violations);
   }
+
+  [Fact]
+  public void SingleDep_HundredThousandSyncTasks_Staggered_RunSerially()
+  {
+    var actor = new TestActor();
+    var running = 0;
+    var violations = 0;
+    var executed = 0;
+    const int taskCount = 100_000;
+    var completed = new CountdownEvent(taskCount);
+
+    LogManager.SuspendLogging();
+    try
+    {
+      for (var i = 0; i < taskCount; i++)
+      {
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+          actor.Post(() =>
+          {
+            if (Interlocked.Increment(ref running) > 1)
+            {
+              Interlocked.Increment(ref violations);
+            }
+
+            Interlocked.Increment(ref executed);
+            Interlocked.Decrement(ref running);
+            completed.Signal();
+          });
+        });
+      }
+
+      Assert.True(completed.Wait(TimeSpan.FromSeconds(60)));
+    }
+    finally
+    {
+      LogManager.ResumeLogging();
+    }
+
+    Assert.Equal(taskCount, executed);
+    Assert.Equal(0, violations);
+  }
+
+  [Fact]
+  public void ThreeDeps_HundredThousandSyncTasks_Staggered_RunSerially()
+  {
+    var actors = Enumerable.Range(0, 3).Select(_ => new TestActor()).ToArray();
+    var running = 0;
+    var violations = 0;
+    var executed = 0;
+    const int taskCount = 100_000;
+    var completed = new CountdownEvent(taskCount);
+
+    LogManager.SuspendLogging();
+    try
+    {
+      for (var i = 0; i < taskCount; i++)
+      {
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+          actors[0].PostWith(() =>
+          {
+            if (Interlocked.Increment(ref running) > 1)
+            {
+              Interlocked.Increment(ref violations);
+            }
+
+            Interlocked.Increment(ref executed);
+            Interlocked.Decrement(ref running);
+            completed.Signal();
+          }, actors[1], actors[2]);
+        });
+      }
+
+      Assert.True(completed.Wait(TimeSpan.FromSeconds(60)));
+    }
+    finally
+    {
+      LogManager.ResumeLogging();
+    }
+
+    Assert.Equal(taskCount, executed);
+    Assert.Equal(0, violations);
+  }
+
+  [Fact]
+  public void CrossActorPostWith_HundredThousandTasks_Staggered_RunSerially()
+  {
+    var actorA = new TestActor();
+    var actorB = new TestActor();
+    var actorC = new TestActor();
+    var runningA = 0;
+    var runningB = 0;
+    var runningC = 0;
+    var violations = 0;
+    const int taskCount = 100_000;
+    var completed = new CountdownEvent(taskCount);
+
+    LogManager.SuspendLogging();
+    try
+    {
+      for (var i = 0; i < taskCount; i++)
+      {
+        switch (i % 3)
+        {
+          case 0:
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+              actorA.PostWith(() =>
+              {
+                var ra = Interlocked.Increment(ref runningA);
+                var rb = Interlocked.Increment(ref runningB);
+                if (ra > 1 || rb > 1)
+                {
+                  Interlocked.Increment(ref violations);
+                }
+
+                Interlocked.Decrement(ref runningA);
+                Interlocked.Decrement(ref runningB);
+                completed.Signal();
+              }, actorB);
+            });
+
+            break;
+          case 1:
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+              actorB.PostWith(() =>
+              {
+                var rb = Interlocked.Increment(ref runningB);
+                var rc = Interlocked.Increment(ref runningC);
+                if (rb > 1 || rc > 1)
+                {
+                  Interlocked.Increment(ref violations);
+                }
+
+                Interlocked.Decrement(ref runningB);
+                Interlocked.Decrement(ref runningC);
+                completed.Signal();
+              }, actorC);
+            });
+
+            break;
+          default:
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+              actorA.PostWith(() =>
+              {
+                var ra = Interlocked.Increment(ref runningA);
+                var rc = Interlocked.Increment(ref runningC);
+                if (ra > 1 || rc > 1)
+                {
+                  Interlocked.Increment(ref violations);
+                }
+
+                Interlocked.Decrement(ref runningA);
+                Interlocked.Decrement(ref runningC);
+                completed.Signal();
+              }, actorC);
+            });
+
+            break;
+        }
+      }
+
+      Assert.True(completed.Wait(TimeSpan.FromSeconds(60)));
+    }
+    finally
+    {
+      LogManager.ResumeLogging();
+    }
+
+    Assert.Equal(0, violations);
+  }
 }
