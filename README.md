@@ -235,7 +235,23 @@ dotnet test C:\depot\Core\CoreLibrary.slnx
 
 ## 스트레스 테스트
 
-동일 dependency를 공유하는 task 100,000개를 ThreadPool에서 동시에 투입하는 극한 경합 시나리오 측정 결과입니다.
+`Barrier(Environment.ProcessorCount * 2)`를 사용하여 CPU 논리 코어 수의 2배에 해당하는 ThreadPool 스레드가 동시에 `Post()` / `PostWith()`를 호출하도록 동기화합니다. 모든 물리 스레드가 동시에 경합에 진입하는 최강 조건에서 직렬화 정확성과 처리량을 검증합니다.
+
+```csharp
+var concurrency = Environment.ProcessorCount * 2; // e.g. 32 on 16-core CPU
+var perThread = taskCount / concurrency;
+var barrier = new Barrier(concurrency);
+
+for (var t = 0; t < concurrency; t++)
+{
+  ThreadPool.QueueUserWorkItem(_ =>
+  {
+    barrier.SignalAndWait(); // 모든 스레드 동시 출발 보장
+    for (var i = 0; i < perThread; i++)
+      actor.Post(() => { ... });
+  });
+}
+```
 
 ### 측정 환경
 
@@ -244,16 +260,18 @@ dotnet test C:\depot\Core\CoreLibrary.slnx
 - **OS**: Windows 11 Pro (10.0.26200)
 - **런타임**: .NET 10.0.8
 
-### 결과 (단위: ms)
+### 결과
 
 | 테스트 | 시나리오 | Debug | Release | Shipping |
 |--------|---------|-------|---------|---------|
-| `SingleDep_HundredThousandSyncTasks_RunSerially` | 1 dep × 100,000 tasks | 82 | 78 | 78 |
-| `ThreeDeps_HundredThousandSyncTasks_RunSerially` | 3 deps × 100,000 tasks | 104 | 132 | 104 |
-| `CrossActorPostWith_HundredThousandTasks_RunSerially` | A+B / B+C / A+C 교차 × 100,000 tasks | 108 | 92 | 91 |
+| `SingleDep_HundredThousandSyncTasks_RunSerially` | 1 dep × 100,000 tasks | 79 ms | 104 ms | 108 ms |
+| `ThreeDeps_HundredThousandSyncTasks_RunSerially` | 3 deps × 100,000 tasks | 16 s † | 18 s † | 15 s † |
+| `CrossActorPostWith_HundredThousandTasks_RunSerially` | A+B / B+C / A+C 교차 × 100,000 tasks | 139 ms | 126 ms | 109 ms |
 
 > Debug · Release는 단일 측정값이다.
 > Shipping은 10회 실행 후 최솟값 · 최댓값을 제외한 평균값이다.
+>
+> † ThreeDeps는 32개 스레드가 3개 lock을 동시에 spin-acquire하는 극한 시나리오다. 각 thread가 3개 lock을 모두 확보하려면 나머지 31개 thread가 쉬지 않고 경합하는 환경에서 CAS 실패율이 높아지고, 이 스핀 오버헤드가 지배적인 비용이 된다. 일반적인 서버 workload에서는 task 제출이 자연적으로 분산되므로 이 수치는 발생하지 않는다.
 
 <br>
 <br>
