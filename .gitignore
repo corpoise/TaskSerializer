@@ -31,6 +31,5 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Internal docs (not for public repo)
-**/docs/
+# Local agent memory (not for public repo)
 **/CLAUDE.md
