@@ -181,7 +181,7 @@ UnhandledExceptionHandler.UnhandledException += ex => myTelemetry.Report(ex);
 
 ## 로깅 (NLog)
 
-라이브러리 루트의 `nlog.config`가 기본 설정으로 제공되며, 빌드 시 출력 디렉토리로 자동 복사됩니다.
+`Systems` 프로젝트의 `nlog.config`가 기본 설정으로 제공되며, 빌드 시 출력 디렉토리로 자동 복사됩니다.
 
 | 항목 | 기본값 |
 |------|--------|
